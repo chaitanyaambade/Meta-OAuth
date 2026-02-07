@@ -22,7 +22,7 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 META_APP_ID = os.getenv("META_APP_ID")
 META_APP_SECRET = os.getenv("META_APP_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:5000/callback")
-GRAPH_API_VERSION = "v21.0"
+GRAPH_API_VERSION = "v24.0"
 
 # In-memory token store (use a database in production)
 token_store = {}
