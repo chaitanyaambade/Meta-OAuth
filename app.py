@@ -9,8 +9,9 @@ Simple Flask app that handles the full OAuth flow:
 """
 
 import os
+import secrets
 import requests
-from flask import Flask, redirect, request, jsonify, render_template_string
+from flask import Flask, redirect, request, jsonify, render_template_string, session
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -80,11 +81,16 @@ def home():
 
 @app.route("/login")
 def login():
+    # Generate CSRF protection token
+    state = secrets.token_urlsafe(32)
+    session['oauth_state'] = state
+
     meta_oauth_url = (
         f"https://www.facebook.com/{GRAPH_API_VERSION}/dialog/oauth"
         f"?client_id={META_APP_ID}"
         f"&redirect_uri={REDIRECT_URI}"
         f"&scope=ads_management,ads_read"
+        f"&state={state}"
     )
     return redirect(meta_oauth_url)
 
@@ -104,6 +110,11 @@ def callback():
             "error": error,
             "description": request.args.get("error_description", "")
         }), 400
+
+    # Verify state parameter (CSRF protection)
+    state = request.args.get("state")
+    if state != session.get('oauth_state'):
+        return jsonify({"status": "error", "message": "Invalid state parameter - possible CSRF attack"}), 400
 
     # Get the authorization code
     code = request.args.get("code")
@@ -169,6 +180,6 @@ if __name__ == "__main__":
         exit(1)
 
     print("Starting AxGen Meta OAuth server...")
-    print(f"Open http://localhost:5000 in your browser")
+    print(f"Open http://localhost:5001 in your browser")
     print(f"Callback URL: {REDIRECT_URI}")
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
