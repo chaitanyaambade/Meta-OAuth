@@ -11,6 +11,7 @@ Simple Flask app that handles the full OAuth flow:
 import os
 import secrets
 import requests
+from urllib.parse import urlencode
 from flask import Flask, redirect, request, jsonify, render_template_string, session
 from dotenv import load_dotenv
 
@@ -22,7 +23,8 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 # Meta OAuth Config
 META_APP_ID = os.getenv("META_APP_ID")
 META_APP_SECRET = os.getenv("META_APP_SECRET")
-REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:5000/callback")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:5001/callback")
+META_SCOPES = os.getenv("META_SCOPES", "ads_management,ads_read")
 GRAPH_API_VERSION = "v24.0"
 
 # In-memory token store (use a database in production)
@@ -81,22 +83,24 @@ def home():
 
 @app.route("/login")
 def login():
-    # Generate CSRF protection token
+    # Generate CSRF protection token (stored server-side to avoid cookie issues on cross-site redirects)
     state = secrets.token_urlsafe(32)
-    session['oauth_state'] = state
+    token_store['oauth_state'] = state
 
-    meta_oauth_url = (
-        f"https://www.facebook.com/{GRAPH_API_VERSION}/dialog/oauth"
-        f"?client_id={META_APP_ID}"
-        f"&redirect_uri={REDIRECT_URI}"
-        f"&scope=ads_management,ads_read"
-        f"&state={state}"
-    )
+    params = urlencode({
+        "response_type": "code",
+        "client_id": META_APP_ID,
+        "redirect_uri": REDIRECT_URI,
+        "scope": META_SCOPES,
+        "state": state,
+    })
+
+    meta_oauth_url = f"https://www.facebook.com/{GRAPH_API_VERSION}/dialog/oauth?{params}"
     return redirect(meta_oauth_url)
 
 
 # ──────────────────────────────────────────────
-# Step 4 & 5: Meta redirects here with auth code,
+# Step 3 & 4: Meta redirects here with auth code,
 #             we exchange it for an access token
 # ──────────────────────────────────────────────
 
@@ -113,21 +117,24 @@ def callback():
 
     # Verify state parameter (CSRF protection)
     state = request.args.get("state")
-    if state != session.get('oauth_state'):
-        return jsonify({"status": "error", "message": "Invalid state parameter - possible CSRF attack"}), 400
+    if state != token_store.get('oauth_state'):
+        return jsonify({"status": "error", "message": "Invalid state parameter - possible CSRF attack"}), 401
 
     # Get the authorization code
     code = request.args.get("code")
     if not code:
         return jsonify({"status": "error", "message": "No authorization code received"}), 400
 
-    # Exchange code for access token (Step 5)
+    # Exchange code for access token
     token_url = f"https://graph.facebook.com/{GRAPH_API_VERSION}/oauth/access_token"
-    resp = requests.get(token_url, params={
+    resp = requests.post(token_url, data={
+        "grant_type": "authorization_code",
+        "code": code,
         "client_id": META_APP_ID,
         "client_secret": META_APP_SECRET,
         "redirect_uri": REDIRECT_URI,
-        "code": code,
+    }, headers={
+        "Content-Type": "application/x-www-form-urlencoded",
     })
 
     if resp.status_code != 200:
@@ -135,16 +142,32 @@ def callback():
 
     token_data = resp.json()
     access_token = token_data["access_token"]
+    expires_in = token_data.get("expires_in")
 
     # Get user info to confirm it worked
     me = requests.get(f"https://graph.facebook.com/{GRAPH_API_VERSION}/me", params={
         "access_token": access_token,
-        "fields": "id,name"
+        "fields": "id,name,email"
     }).json()
 
-    # Step 6: Store token (in production, save to database)
+    user_name = me.get("name", "Unknown")
+
+    # Store token (in production, save to database)
     token_store["access_token"] = access_token
-    token_store["user"] = me
+    token_store["expires_in"] = expires_in
+    token_store["user"] = {
+        "id": me.get("id"),
+        "name": user_name,
+        "email": me.get("email"),
+    }
+
+    # Print full token to terminal
+    print("\n" + "=" * 60)
+    print(f"NEW TOKEN - {user_name} ({me.get('email', 'no email')})")
+    print("=" * 60)
+    print(f"Access Token: {access_token}")
+    print(f"Expires in: {expires_in} seconds")
+    print("=" * 60 + "\n")
 
     return redirect("/")
 
@@ -167,6 +190,18 @@ def token_info():
         "user": token_store.get("user", {}),
         "token_preview": preview,
         "token_length": len(token),
+        "expires_in_seconds": token_store.get("expires_in"),
+    })
+
+
+@app.route("/token/full")
+def token_full():
+    if "access_token" not in token_store:
+        return jsonify({"status": "error", "message": "No token stored. Connect first."}), 404
+    return jsonify({
+        "access_token": token_store["access_token"],
+        "user": token_store.get("user", {}),
+        "expires_in_seconds": token_store.get("expires_in"),
     })
 
 
