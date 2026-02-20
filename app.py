@@ -24,9 +24,9 @@ app.secret_key = os.getenv("SECRET_KEY", "dev-secret-key")
 META_APP_ID = os.getenv("META_APP_ID")
 META_APP_SECRET = os.getenv("META_APP_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI", "http://localhost:5001/callback")
-META_SCOPES = os.getenv("META_SCOPES", "ads_management,ads_read")
+META_SCOPES = os.getenv("META_SCOPES", "public_profile")
 META_CONFIG_ID = os.getenv("META_CONFIG_ID", "")
-GRAPH_API_VERSION = "v24.0"
+GRAPH_API_VERSION = "v21.0"
 
 # In-memory token store (use a database in production)
 token_store = {}
@@ -95,7 +95,6 @@ def login():
         "state": state,
     }
 
-    # Facebook Login for Business requires config_id instead of scope
     if META_CONFIG_ID:
         oauth_params["config_id"] = META_CONFIG_ID
     else:
@@ -103,7 +102,7 @@ def login():
 
     params = urlencode(oauth_params)
 
-    meta_oauth_url = f"https://www.facebook.com/{GRAPH_API_VERSION}/dialog/oauth?{params}"
+    meta_oauth_url = f"https://www.facebook.com/dialog/oauth?{params}"
     return redirect(meta_oauth_url)
 
 
