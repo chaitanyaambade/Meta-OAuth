@@ -148,8 +148,26 @@ def callback():
         return jsonify({"status": "error", "message": "Token exchange failed", "details": resp.json()}), 400
 
     token_data = resp.json()
-    access_token = token_data["access_token"]
-    expires_in = token_data.get("expires_in")
+    short_lived_token = token_data["access_token"]
+
+    # Exchange short-lived token for long-lived token (~60 days)
+    long_lived_resp = requests.get(f"https://graph.facebook.com/{GRAPH_API_VERSION}/oauth/access_token", params={
+        "grant_type": "fb_exchange_token",
+        "client_id": META_APP_ID,
+        "client_secret": META_APP_SECRET,
+        "fb_exchange_token": short_lived_token,
+    })
+
+    if long_lived_resp.status_code == 200:
+        long_lived_data = long_lived_resp.json()
+        access_token = long_lived_data["access_token"]
+        expires_in = long_lived_data.get("expires_in")
+        token_type = "long-lived"
+    else:
+        # Fallback to short-lived token if exchange fails
+        access_token = short_lived_token
+        expires_in = token_data.get("expires_in")
+        token_type = "short-lived"
 
     # Get user info to confirm it worked
     me = requests.get(f"https://graph.facebook.com/{GRAPH_API_VERSION}/me", params={
@@ -162,6 +180,7 @@ def callback():
     # Store token (in production, save to database)
     token_store["access_token"] = access_token
     token_store["expires_in"] = expires_in
+    token_store["token_type"] = token_type
     token_store["user"] = {
         "id": me.get("id"),
         "name": user_name,
@@ -170,10 +189,10 @@ def callback():
 
     # Print full token to terminal
     print("\n" + "=" * 60)
-    print(f"NEW TOKEN - {user_name} ({me.get('email', 'no email')})")
+    print(f"NEW TOKEN ({token_type}) - {user_name} ({me.get('email', 'no email')})")
     print("=" * 60)
     print(f"Access Token: {access_token}")
-    print(f"Expires in: {expires_in} seconds")
+    print(f"Expires in: {expires_in} seconds (~{expires_in // 86400} days)")
     print("=" * 60 + "\n")
 
     return redirect("/")
