@@ -9,7 +9,7 @@ A simple Flask application that handles the complete Meta (Facebook) OAuth flow 
 3. User grants `ads_management` and `ads_read` permissions
 4. Meta redirects back with an authorization code
 5. The app exchanges the code for an access token
-6. Token is stored and ready for API calls
+6. Token is stored and ready for the API calls
 
 ## Setup
 
@@ -51,7 +51,7 @@ Open [http://localhost:5000](http://localhost:5000) in your browser and click **
 
 | Route | Description |
 |-------|-------------|
-| `/` | Home page with connect button |
+| `/` | Home page with a connect button |
 | `/login` | Initiates the OAuth flow |
 | `/callback` | Handles the Meta OAuth redirect |
 | `/token` | View stored token info (preview only) |
