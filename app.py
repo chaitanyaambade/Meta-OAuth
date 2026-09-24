@@ -1,11 +1,18 @@
 """
 Meta OAuth Flow for AxGen
+
 Simple Flask app that handles the full OAuth flow:
+
 1. User clicks "Connect Meta Ads"
+
 2. Redirects to Meta login
+
 3. Meta redirects back with auth code
+
 4. We exchange code for access token
+
 5. Store token for API calls
+
 """
 
 import os
